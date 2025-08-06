@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elite Web Scraper - Browser Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.1/cdn.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8" x-data="scraperApp()">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-spider text-blue-600"></i>
+                Elite Web Scraper
+            </h1>
+            <p class="text-gray-600">Professional web scraping with advanced anti-detection capabilities</p>
+        </div>
+
+        <!-- Main Interface -->
+        <div class="grid lg:grid-cols-2 gap-8">
+            <!-- Configuration Panel -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-6">
+                    <i class="fas fa-cogs text-blue-600"></i>
+                    Configuration
+                </h2>
+
+                <form @submit.prevent="startScraping" class="space-y-6">
+                    <!-- URL Input -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            URLs to Scrape
+                        </label>
+                        <div class="space-y-3">
+                            <!-- Single URL Tab -->
+                            <div x-show="urlInputMode === 'single'">
+                                <input 
+                                    x-model="singleUrl" 
+                                    type="url" 
+                                    placeholder="https://example.com"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                            </div>
+                            
+                            <!-- Multiple URLs Tab -->
+                            <div x-show="urlInputMode === 'multiple'">
+                                <textarea 
+                                    x-model="multipleUrls" 
+                                    rows="6" 
+                                    placeholder="Enter one URL per line:&#10;https://example1.com&#10;https://example2.com&#10;https://example3.com"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                ></textarea>
+                            </div>
+                            
+                            <!-- URL Input Mode Tabs -->
+                            <div class="flex border-b">
+                                <button 
+                                    @click="urlInputMode = 'single'" 
+                                    type="button"
+                                    :class="urlInputMode === 'single' ? 'border-blue-500 text-blue-600' : 'text-gray-500'"
+                                    class="px-4 py-2 border-b-2 font-medium text-sm"
+                                >
+                                    Single URL
+                                </button>
+                                <button 
+                                    @click="urlInputMode = 'multiple'" 
+                                    type="button"
+                                    :class="urlInputMode === 'multiple' ? 'border-blue-500 text-blue-600' : 'text-gray-500'"
+                                    class="px-4 py-2 border-b-2 font-medium text-sm ml-8"
+                                >
+                                    Multiple URLs
+                                </button>
+                                <button 
+                                    @click="urlInputMode = 'file'" 
+                                    type="button"
+                                    :class="urlInputMode === 'file' ? 'border-blue-500 text-blue-600' : 'text-gray-500'"
+                                    class="px-4 py-2 border-b-2 font-medium text-sm ml-8"
+                                >
+                                    Upload File
+                                </button>
+                            </div>
+                            
+                            <!-- File Upload -->
+                            <div x-show="urlInputMode === 'file'">
+                                <input 
+                                    @change="handleFileUpload" 
+                                    type="file" 
+                                    accept=".txt,.csv"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                <p class="text-sm text-gray-500 mt-1">Upload a text or CSV file with one URL per line</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Settings -->
+                    <div class="border-t pt-6">
+                        <h3 class="text-lg font-medium text-gray-800 mb-4">Advanced Settings</h3>
+                        
+                        <!-- Selenium Option -->
+                        <div class="flex items-center mb-4">
+                            <input 
+                                x-model="config.use_selenium" 
+                                type="checkbox" 
+                                id="use_selenium"
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            >
+                            <label for="use_selenium" class="ml-3 text-sm text-gray-700">
+                                Use Selenium for JavaScript-heavy sites
+                            </label>
+                        </div>
+
+                        <!-- Robots.txt Option -->
+                        <div class="flex items-center mb-4">
+                            <input 
+                                x-model="config.ignore_robots" 
+                                type="checkbox" 
+                                id="ignore_robots"
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            >
+                            <label for="ignore_robots" class="ml-3 text-sm text-gray-700">
+                                Ignore robots.txt (Elite Mode)
+                            </label>
+                        </div>
+
+                        <!-- Proxy Settings -->
+                        <div class="mb-4">
+                            <div class="flex items-center mb-2">
+                                <input 
+                                    x-model="config.use_proxies" 
+                                    type="checkbox" 
+                                    id="use_proxies"
+                                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                >
+                                <label for="use_proxies" class="ml-3 text-sm text-gray-700">
+                                    Use Proxy Rotation
+                                </label>
+                            </div>
+                            <textarea 
+                                x-show="config.use_proxies"
+                                x-model="proxyList" 
+                                rows="3" 
+                                placeholder="Enter proxy URLs (one per line):&#10;http://proxy1:port&#10;http://username:password@proxy2:port"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            ></textarea>
+                        </div>
+
+                        <!-- Delay Settings -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-700 mb-1">Min Delay (seconds)</label>
+                                <input 
+                                    x-model="config.delay_min" 
+                                    type="number" 
+                                    min="0.1" 
+                                    step="0.1"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-700 mb-1">Max Delay (seconds)</label>
+                                <input 
+                                    x-model="config.delay_max" 
+                                    type="number" 
+                                    min="0.1" 
+                                    step="0.1"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Start Button -->
+                    <button 
+                        type="submit" 
+                        :disabled="isRunning || (!singleUrl && !multipleUrls && urlInputMode !== 'file')"
+                        :class="isRunning ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'"
+                        class="w-full text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
+                    >
+                        <span x-show="!isRunning">
+                            <i class="fas fa-play"></i>
+                            Start Scraping
+                        </span>
+                        <span x-show="isRunning">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            Scraping in Progress...
+                        </span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-6">
+                    <i class="fas fa-chart-bar text-green-600"></i>
+                    Results & Progress
+                </h2>
+
+                <!-- Progress Section -->
+                <div x-show="currentJob" class="mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm font-medium text-gray-700">Progress</span>
+                        <span class="text-sm text-gray-500" x-text="`${progress}%`"></span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                            class="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                            :style="`width: ${progress}%`"
+                        ></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span x-text="`${completedUrls} of ${totalUrls} URLs`"></span>
+                        <span x-text="jobStatus"></span>
+                    </div>
+                </div>
+
+                <!-- Live Log -->
+                <div x-show="currentJob" class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-800 mb-2">Live Progress</h3>
+                    <div class="bg-black text-green-400 p-4 rounded-lg h-48 overflow-y-auto font-mono text-sm">
+                        <template x-for="message in logMessages" :key="message.id">
+                            <div x-text="message.text" class="mb-1"></div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Results Summary -->
+                <div x-show="results.length > 0" class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-800 mb-4">Results Summary</h3>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-green-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-green-600" x-text="results.length"></div>
+                            <div class="text-sm text-green-700">Successful Scrapes</div>
+                        </div>
+                        <div class="bg-red-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-red-600" x-text="errors.length"></div>
+                            <div class="text-sm text-red-700">Errors</div>
+                        </div>
+                    </div>
+
+                    <!-- Download Buttons -->
+                    <div class="flex gap-2 mb-4">
+                        <button 
+                            @click="downloadResults('json')"
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                        >
+                            <i class="fas fa-download"></i>
+                            Download JSON
+                        </button>
+                        <button 
+                            @click="downloadResults('csv')"
+                            class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                        >
+                            <i class="fas fa-file-csv"></i>
+                            Download CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Preview -->
+                <div x-show="results.length > 0" class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-800 mb-2">Results Preview</h3>
+                    <div class="max-h-64 overflow-y-auto">
+                        <template x-for="result in results.slice(0, 5)" :key="result.url">
+                            <div class="border border-gray-200 rounded-lg p-3 mb-2">
+                                <div class="font-medium text-blue-600" x-text="result.title || 'No Title'"></div>
+                                <div class="text-sm text-gray-600" x-text="result.url"></div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    <span x-text="`${result.paragraphs?.length || 0} paragraphs`"></span> |
+                                    <span x-text="`${result.links?.length || 0} links`"></span> |
+                                    <span x-text="`${result.images?.length || 0} images`"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div x-show="results.length > 5" class="text-sm text-gray-500 text-center">
+                        Showing first 5 results. Download full dataset above.
+                    </div>
+                </div>
+
+                <!-- Errors Section -->
+                <div x-show="errors.length > 0" class="mt-6">
+                    <h3 class="text-lg font-medium text-red-600 mb-2">Errors</h3>
+                    <div class="max-h-32 overflow-y-auto">
+                        <template x-for="error in errors" :key="error.url">
+                            <div class="bg-red-50 border border-red-200 rounded-lg p-2 mb-2">
+                                <div class="font-medium text-red-700" x-text="error.url"></div>
+                                <div class="text-sm text-red-600" x-text="error.error"></div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div x-show="!currentJob && results.length === 0" class="text-center py-8">
+                    <i class="fas fa-search text-6xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-500">Configure your scraping settings and start scraping to see results here.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 text-gray-600">
+            <p class="mb-2">
+                <i class="fas fa-shield-alt text-green-600"></i>
+                Elite Web Scraper - Professional grade scraping with anti-detection
+            </p>
+            <p class="text-sm">
+                <strong>Ethical Notice:</strong> Please respect website terms of service and robots.txt when scraping.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function scraperApp() {
+            return {
+                // UI State
+                urlInputMode: 'single',
+                isRunning: false,
+                
+                // Form Data
+                singleUrl: '',
+                multipleUrls: '',
+                proxyList: '',
+                config: {
+                    use_selenium: false,
+                    ignore_robots: true,
+                    use_proxies: false,
+                    delay_min: 1,
+                    delay_max: 3
+                },
+                
+                // Job Data
+                currentJob: null,
+                progress: 0,
+                jobStatus: '',
+                totalUrls: 0,
+                completedUrls: 0,
+                
+                // Results
+                results: [],
+                errors: [],
+                logMessages: [],
+                
+                // WebSocket
+                socket: null,
+                
+                init() {
+                    this.initSocket();
+                },
+                
+                initSocket() {
+                    this.socket = io();
+                    
+                    this.socket.on('job_update', (data) => {
+                        this.updateJobStatus(data);
+                    });
+                },
+                
+                async startScraping() {
+                    if (this.isRunning) return;
+                    
+                    // Prepare URLs
+                    let urls = [];
+                    if (this.urlInputMode === 'single' && this.singleUrl) {
+                        urls = [this.singleUrl];
+                    } else if (this.urlInputMode === 'multiple' && this.multipleUrls) {
+                        urls = this.multipleUrls.split('\n').filter(url => url.trim());
+                    }
+                    
+                    if (!urls.length) {
+                        alert('Please enter at least one URL');
+                        return;
+                    }
+                    
+                    // Prepare request data
+                    const requestData = {
+                        urls: urls.join('\n'),
+                        ...this.config,
+                        proxy_list: this.proxyList
+                    };
+                    
+                    try {
+                        this.isRunning = true;
+                        this.results = [];
+                        this.errors = [];
+                        this.logMessages = [];
+                        
+                        const response = await fetch('/api/scrape', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestData)
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.currentJob = data.job_id;
+                            this.totalUrls = data.total_urls;
+                            this.progress = 0;
+                            this.jobStatus = 'Starting...';
+                            
+                            // Join job room for real-time updates
+                            this.socket.emit('join_job', { job_id: data.job_id });
+                            
+                            this.addLogMessage(`🚀 Started scraping ${data.total_urls} URLs`);
+                        } else {
+                            throw new Error(data.error || 'Failed to start scraping');
+                        }
+                    } catch (error) {
+                        alert(`Error: ${error.message}`);
+                        this.isRunning = false;
+                    }
+                },
+                
+                updateJobStatus(data) {
+                    this.progress = data.progress;
+                    this.jobStatus = data.status;
+                    this.completedUrls = data.completed_urls;
+                    
+                    if (data.message) {
+                        this.addLogMessage(data.message);
+                    }
+                    
+                    if (data.status === 'completed' || data.status === 'error') {
+                        this.isRunning = false;
+                        this.loadResults();
+                    }
+                },
+                
+                addLogMessage(message) {
+                    const timestamp = new Date().toLocaleTimeString();
+                    this.logMessages.push({
+                        id: Date.now() + Math.random(),
+                        text: `[${timestamp}] ${message}`
+                    });
+                    
+                    // Keep only last 50 messages
+                    if (this.logMessages.length > 50) {
+                        this.logMessages = this.logMessages.slice(-50);
+                    }
+                    
+                    // Auto-scroll log to bottom
+                    setTimeout(() => {
+                        const logEl = document.querySelector('.bg-black');
+                        if (logEl) {
+                            logEl.scrollTop = logEl.scrollHeight;
+                        }
+                    }, 50);
+                },
+                
+                async loadResults() {
+                    if (!this.currentJob) return;
+                    
+                    try {
+                        const response = await fetch(`/api/job/${this.currentJob}/results`);
+                        const data = await response.json();
+                        
+                        this.results = data.results || [];
+                        this.errors = data.errors || [];
+                    } catch (error) {
+                        console.error('Error loading results:', error);
+                    }
+                },
+                
+                async downloadResults(format) {
+                    if (!this.currentJob) return;
+                    
+                    const url = format === 'csv' 
+                        ? `/api/job/${this.currentJob}/download-csv`
+                        : `/api/job/${this.currentJob}/download`;
+                    
+                    window.open(url, '_blank');
+                },
+                
+                async handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    try {
+                        const response = await fetch('/api/upload-urls', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.multipleUrls = data.urls.join('\n');
+                            this.urlInputMode = 'multiple';
+                            alert(`Loaded ${data.count} URLs from file`);
+                        } else {
+                            alert(`Error: ${data.error}`);
+                        }
+                    } catch (error) {
+                        alert(`Error uploading file: ${error.message}`);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
