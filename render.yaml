@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: elite-web-scraper
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT wsgi:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CHROME_BIN
+        value: /usr/bin/google-chrome-stable
+      - key: CHROMEDRIVER_PATH
+        value: /usr/local/bin/chromedriver
