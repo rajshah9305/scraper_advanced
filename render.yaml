@@ -6,7 +6,7 @@ services:
     startCommand: startCommand: python flask_scraper_app.py
     envVars:
       - key: FLASK_ENV
-        value:TRUE
+        value:production
       - key: SECRET_KEY
         generateValue: true
       - key: CHROME_BIN
