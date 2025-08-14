@@ -22,8 +22,8 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['RESULTS_FOLDER'] = 'results'
 
-# Initialize SocketIO for real-time updates
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# Initialize SocketIO for real-time updates with threading async mode
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logger=False, engineio_logger=False)
 
 # Ensure directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -254,11 +254,14 @@ def run_enhanced_scraping_job(job: ScrapingJob):
 
 def emit_job_update(job: ScrapingJob, message: str = None):
     """Emit job update via WebSocket"""
-    job_data = job.to_dict()
-    if message:
-        job_data['message'] = message
-    
-    socketio.emit('job_update', job_data, room=job.job_id)
+    try:
+        job_data = job.to_dict()
+        if message:
+            job_data['message'] = message
+        
+        socketio.emit('job_update', job_data, room=job.job_id)
+    except Exception as e:
+        logger.error(f"Error emitting job update: {e}")
 
 @app.route('/api/job/<job_id>')
 def get_job_status(job_id):
@@ -472,4 +475,5 @@ def health_check():
 if __name__ == '__main__':
     logger.info("Starting Elite Web Scraper Flask application...")
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+    # Use simple Flask development server for deployment compatibility
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
