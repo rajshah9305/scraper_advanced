@@ -2,14 +2,16 @@ services:
   - type: web
     name: elite-web-scraper
     env: python
+    region: oregon
+    plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: startCommand: python flask_scraper_app.py
+    startCommand: python flask_scraper_app.py
     envVars:
       - key: FLASK_ENV
-        value:production
+        value: production
       - key: SECRET_KEY
         generateValue: true
-      - key: CHROME_BIN
-        value: /usr/bin/google-chrome-stable
-      - key: CHROMEDRIVER_PATH
-        value: /usr/local/bin/chromedriver
+      - key: PYTHONPATH
+        value: /opt/render/project/src
+      - key: PORT
+        value: 10000
