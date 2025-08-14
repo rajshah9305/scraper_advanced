@@ -4,15 +4,8 @@ import json
 import time
 import random
 import logging
-from fake_useragent import UserAgent
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from urllib.robotparser import RobotFileParser
-import urllib.parse
 import hashlib
+import urllib.parse
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,6 +13,32 @@ from datetime import datetime
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Try to import optional dependencies
+try:
+    from fake_useragent import UserAgent
+    HAS_FAKE_USERAGENT = True
+except ImportError:
+    HAS_FAKE_USERAGENT = False
+    logger.warning("fake-useragent not available, using default user agents")
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    HAS_SELENIUM = True
+except ImportError:
+    HAS_SELENIUM = False
+    logger.warning("Selenium not available, disabling JavaScript rendering")
+
+try:
+    from urllib.robotparser import RobotFileParser
+    HAS_ROBOTPARSER = True
+except ImportError:
+    HAS_ROBOTPARSER = False
+    logger.warning("robotparser not available, robots.txt checking disabled")
 
 @dataclass
 class ProxyInfo:
@@ -62,11 +81,6 @@ class ProxyManager:
         """Get the healthiest proxy with lowest response time"""
         current_time = time.time()
         
-        # Periodic health check
-        if current_time - self.last_health_check > self.health_check_interval:
-            self.check_proxy_health()
-            self.last_health_check = current_time
-        
         # Filter healthy proxies
         healthy_proxies = [p for p in self.proxies if p.health > 50]
         
@@ -95,26 +109,6 @@ class ProxyManager:
                     proxy.health = max(0, proxy.health - 20)
                     proxy.failure_count += 1
                 break
-    
-    def check_proxy_health(self):
-        """Test all proxies for health"""
-        logger.info("Performing proxy health check...")
-        for proxy in self.proxies:
-            try:
-                start_time = time.time()
-                response = requests.get('https://httpbin.org/ip', 
-                                     proxies={'http': proxy.url, 'https': proxy.url},
-                                     timeout=10)
-                response_time = time.time() - start_time
-                
-                if response.status_code == 200:
-                    proxy.health = min(100, proxy.health + 10)
-                    proxy.response_time = response_time
-                else:
-                    proxy.health = max(0, proxy.health - 10)
-            except Exception as e:
-                logger.warning(f"Proxy {proxy.url} health check failed: {e}")
-                proxy.health = max(0, proxy.health - 30)
 
 class AdaptiveRateLimiter:
     """Intelligent rate limiting based on server responses"""
@@ -189,11 +183,6 @@ class DataValidator:
             quality_score -= 50
             issues.append("Possible bot detection page")
         
-        # Check for duplicate content
-        if self._has_duplicate_content(data):
-            quality_score -= 20
-            issues.append("Duplicate content detected")
-        
         return {
             'quality_score': max(0, quality_score),
             'is_valid': quality_score > 40,
@@ -201,16 +190,6 @@ class DataValidator:
             'content_length': total_content_length,
             'paragraph_count': paragraph_count
         }
-    
-    def _has_duplicate_content(self, data: Dict[str, Any]) -> bool:
-        """Check for duplicate content patterns"""
-        paragraphs = data.get('paragraphs', [])
-        if len(paragraphs) < 2:
-            return False
-        
-        # Simple duplicate detection
-        unique_paragraphs = set(p.strip() for p in paragraphs if len(p.strip()) > 10)
-        return len(unique_paragraphs) < len(paragraphs) * 0.8
 
 class PerformanceMonitor:
     """Performance monitoring and metrics collection"""
@@ -271,6 +250,8 @@ class PerformanceMonitor:
     
     def _check_performance_alerts(self):
         """Check for performance issues"""
+        self.alerts = []  # Clear old alerts
+        
         if self.metrics['success_rate'] < 0.8 and self.metrics['total_requests'] > 10:
             self.alerts.append("Low success rate detected")
         
@@ -292,11 +273,21 @@ class AdvancedWebScraper:
     def __init__(self, use_proxies=False, proxy_list=None, ignore_robots=True, 
                  use_selenium=False, max_retries=3):
         self.session = requests.Session()
-        self.ua = UserAgent()
         self.use_proxies = use_proxies
         self.ignore_robots = ignore_robots
-        self.use_selenium = use_selenium
+        self.use_selenium = use_selenium and HAS_SELENIUM
         self.driver = None
+        
+        # Set up user agent
+        if HAS_FAKE_USERAGENT:
+            self.ua = UserAgent()
+        else:
+            # Fallback user agents
+            self.fallback_user_agents = [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            ]
         
         # Enhanced components
         self.retry_manager = RetryManager(max_retries=max_retries)
@@ -310,25 +301,41 @@ class AdvancedWebScraper:
     
     def _setup_selenium(self):
         """Setup headless Chrome browser for JavaScript rendering"""
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument(f"--user-agent={self.ua.random}")
-        
+        if not HAS_SELENIUM:
+            logger.warning("Selenium not available, disabling JavaScript rendering")
+            self.use_selenium = False
+            return
+            
         try:
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument(f"--user-agent={self._get_user_agent()}")
+            
             self.driver = webdriver.Chrome(options=chrome_options)
             logger.info("Selenium WebDriver initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Selenium WebDriver: {e}")
             self.use_selenium = False
 
+    def _get_user_agent(self):
+        """Get a random user agent"""
+        if HAS_FAKE_USERAGENT:
+            try:
+                return self.ua.random
+            except:
+                pass
+        
+        # Fallback to predefined user agents
+        return random.choice(self.fallback_user_agents)
+
     def _get_headers(self):
         """Generate realistic browser headers"""
         return {
-            'User-Agent': self.ua.random,
+            'User-Agent': self._get_user_agent(),
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -346,17 +353,9 @@ class AdvancedWebScraper:
             return self.proxy_manager.get_best_proxy()
         return None
 
-    def _random_delay(self, min_delay=1, max_delay=3):
-        """Add adaptive delay between requests"""
-        delay = self.rate_limiter.adjust_delay(True)  # Assume success for now
-        delay = max(min_delay, min(max_delay, delay))
-        time.sleep(delay)
-        logger.info(f"Delayed for {delay:.2f} seconds")
-
     def _check_robots_txt(self, url):
         """Check if URL is allowed by robots.txt (if not ignoring)"""
-        if self.ignore_robots:
-            logger.info("Ignoring robots.txt restrictions")
+        if self.ignore_robots or not HAS_ROBOTPARSER:
             return True
         
         try:
@@ -367,11 +366,11 @@ class AdvancedWebScraper:
             rp.set_url(robots_url)
             rp.read()
             
-            user_agent = self.ua.random
+            user_agent = self._get_user_agent()
             allowed = rp.can_fetch(user_agent, url)
             
             if not allowed:
-                logger.warning(f"URL {url} is disallowed by robots.txt for user-agent {user_agent}")
+                logger.warning(f"URL {url} is disallowed by robots.txt")
             
             return allowed
         except Exception as e:
@@ -428,7 +427,7 @@ class AdvancedWebScraper:
     def parse_html(self, html_content):
         """Parse HTML content"""
         if html_content:
-            return BeautifulSoup(html_content, 'lxml')
+            return BeautifulSoup(html_content, 'html.parser')  # Use built-in parser as fallback
         return None
 
     def extract_data(self, soup, url):
@@ -495,8 +494,9 @@ class AdvancedWebScraper:
         # Extract structured data (JSON-LD)
         for script in soup.find_all('script', type='application/ld+json'):
             try:
-                structured_data = json.loads(script.string)
-                data['structured_data'].append(structured_data)
+                if script.string:
+                    structured_data = json.loads(script.string)
+                    data['structured_data'].append(structured_data)
             except:
                 continue
         
@@ -565,7 +565,8 @@ class AdvancedWebScraper:
             
             # Add delay between requests
             if i < total_urls:
-                self._random_delay()
+                delay = self.rate_limiter.adjust_delay(True)
+                time.sleep(delay)
         
         logger.info(f"Completed scraping. Success: {len(results)}/{total_urls}")
         return results
@@ -598,12 +599,18 @@ class AdvancedWebScraper:
     def close(self):
         """Clean up resources"""
         if self.driver:
-            self.driver.quit()
-            logger.info("Selenium WebDriver closed")
+            try:
+                self.driver.quit()
+                logger.info("Selenium WebDriver closed")
+            except:
+                pass
         
         if self.session:
-            self.session.close()
-            logger.info("Requests session closed")
+            try:
+                self.session.close()
+                logger.info("Requests session closed")
+            except:
+                pass
 
 def main():
     """Example usage of the enhanced scraper"""
@@ -638,4 +645,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
